@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class EventMonitoringServer {
 
     private static final int THREAD_POOL_SIZE = 5;
+
     private static final ExecutorService executorService =
             Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
@@ -25,7 +26,6 @@ public class EventMonitoringServer {
             startServer();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            e.printStackTrace();
         } finally {
             stopServer();
         }
@@ -33,24 +33,33 @@ public class EventMonitoringServer {
 
     private static void startServer() throws InterruptedException {
 
-        System.out.println("Event Monitoring Server Started");
+        System.out.println("Event monitoring server started. Enter 'shutdown' to stop the server manually.");
 
-        // Submit event processing tasks
+        // Submit 10 event-processing tasks
         for (int i = 1; i <= 10; i++) {
             final int eventId = i;
 
             executorService.submit(() -> processEvent(eventId));
         }
 
-        // Wait until a shutdown signal is received
+        // Listen for manual shutdown in a separate thread
+        Thread inputThread = new Thread(() -> {
+            String input = getUserInput();
+
+            if ("shutdown".equalsIgnoreCase(input.trim())) {
+                shutdownLatch.countDown();
+            }
+        });
+
+        inputThread.setDaemon(true);
+        inputThread.start();
+
+        // Wait for automatic or manual shutdown
         waitForShutdownSignal();
     }
 
     private static void processEvent(int eventId) {
 
-        System.out.println("Processing Event: " + eventId);
-
-        // Simulate event processing
         try {
             Thread.sleep(1000);
         } catch (InterruptedException e) {
@@ -58,57 +67,39 @@ public class EventMonitoringServer {
             return;
         }
 
-        // Simulate detecting a high-magnitude event
-        if (eventId >= 8) {
-            highMagnitudeEventDetected.set(true);
-
-            System.out.println(
-                "High Magnitude Event Detected: " + eventId
-            );
-
-            // Signal server shutdown
-            shutdownLatch.countDown();
-        } else {
-            System.out.println("Event Processed: " + eventId);
+        // Example high-magnitude event condition
+        if (eventId == 9) {
+            if (highMagnitudeEventDetected.compareAndSet(false, true)) {
+                System.out.println("High magnitude event detected!");
+                shutdownLatch.countDown();
+            }
         }
+
+        System.out.println("Event " + eventId + " processed.");
     }
 
-    private static void waitForShutdownSignal()
-            throws InterruptedException {
-
-        System.out.println("Waiting for shutdown signal...");
-
-        // Block until the latch reaches zero
+    private static void waitForShutdownSignal() throws InterruptedException {
         shutdownLatch.await();
-
-        System.out.println("Shutdown signal received!");
     }
 
     private static String getUserInput() {
-
         Scanner scanner = new Scanner(System.in);
         return scanner.nextLine();
     }
 
     private static void stopServer() {
 
-        System.out.println("Stopping Event Monitoring Server...");
+        System.out.println("Shutting down the server gracefully...");
 
         executorService.shutdown();
 
         try {
-            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
                 executorService.shutdownNow();
             }
         } catch (InterruptedException e) {
             executorService.shutdownNow();
             Thread.currentThread().interrupt();
-        }
-
-        System.out.println("Server Stopped.");
-
-        if (highMagnitudeEventDetected.get()) {
-            System.out.println("High magnitude event was detected.");
         }
     }
 }
